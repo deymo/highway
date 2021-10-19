@@ -55,3 +55,52 @@ jobs:
           path: ~/.cache/bazel
           key: bazel-${{ runner.os }}
       - run: bazel build //...
+
+  windows_msys2:
+    name: Windows MSYS2 / ${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            msystem: mingw64
+          - arch: i686
+            msystem: mingw32
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-${{ matrix.arch }}-cmake
+            mingw-w64-${{ matrix.arch }}-gcc
+            mingw-w64-${{ matrix.arch }}-gtest
+            mingw-w64-${{ matrix.arch }}-ninja
+
+      - name: CMake configure
+        # TODO(deymo): Set HWY_WARNINGS_ARE_ERRORS=ON once the warnings are
+        # resolved.
+        run: |
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHWY_WARNINGS_ARE_ERRORS=OFF \
+            -DHWY_SYSTEM_GTEST=ON \
+            -B out \
+            -G Ninja
+      - name: CMake build
+        run: cmake --build out
+      - name: Test
+        run: ctest --test-dir out --parallel 2 --output-on-failure
+
+      - uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: my-artifact
+          path: out/
